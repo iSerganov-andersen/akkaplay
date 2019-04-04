@@ -1,0 +1,129 @@
+﻿@{
+    ViewBag.Title = "title";
+    Layout = "_Layout";
+}
+<div class="jumbotron">
+    <h1>Web Crawler of Doom</h1>
+    <p class="lead">Akka.NET on Gorilla Steroids</p>
+    <p><a href="http://getakka.net" class="btn btn-primary btn-lg">Learn more &raquo;</a></p>
+</div>
+<div class="row">
+    <div class="input-group">
+        <span class="input-group-btn">
+            <button class="btn btn-default" type="button" id="btnAdd">Add URL to Azure Queue</button>
+        </span>
+        <input type="text" id="urlValue" />
+    </div>
+</div>
+<div class="row">
+    <div class="input-group">
+        <label for="count">Messages in April queue:</label>
+        <input type="text" disabled id="count" />
+    </div>
+</div>
+<div class="row">
+    <div class="input-group">
+        <span class="input-group-btn">
+            <button class="btn btn-default" type="button" id="btnQuery">Have Fun</button>
+        </span>
+    </div><!-- /input-group -->
+    <div class="well" id="output">
+        <!-- ko foreach: messages -->
+        <p data-bind="text:message"></p>
+        <!-- /ko -->
+    </div>
+</div>
+@section Scripts{
+    <script src="/lib/signalr/signalr.js"></script>
+    <script src="/lib/date.format.js"></script>
+    <script src="/lib/knockoutjs/knockout-3.3.0.js"></script>
+    <script>
+        function StreamViewModel() {
+            var self = this;
+
+            self.messages = ko.observableArray([]);
+
+            self.addMessage = function (message) {
+                self.messages.unshift({ message: message });
+                if (self.messages().length > 20) {
+                    self.messages.pop(); // create circular-buffer-like behavior
+                }
+            };
+        }
+
+        var stream = new StreamViewModel();
+        ko.applyBindings(stream);
+
+        $(function () {
+            // Reference the auto-generated proxy for the hub.
+            var chat = new signalR.HubConnectionBuilder().withUrl("/hubs/crawlHub").build();
+            // Create a function that the hub can call back to display messages.
+            chat.on("writeStatus", function (message) {
+                stream.addMessage(message);
+            });
+            
+            chat.start().then(function () {
+                chat.on('CounterSubscription', function (res) {
+                    $('#count').val(res.count);
+                    if (res.status !== 'Success')
+                        alert(res.message);
+                })
+                refreshCounter();
+                $('#btnQuery').click(function () {
+                    //call the StartCrawl method on the hub
+                    chat.send("StartCrawl").then(function () {
+                        alert("Actors started digging...");
+                        setTimeout(() => {
+                            refreshCounter();
+                        }, 1000);
+                    }).catch(mes => {
+                        alert(mes);
+                    });
+
+                    $('#crawlDomain').val('').focus();
+                });
+                $('#btnAdd').click(function () {
+                    //call the StartCrawl method on the hub
+                    chat.send("AddUrl", $('#urlValue').val()).then(function () {
+                        alert("Message successfully added to Azure Storage Queue");
+                        setTimeout(() => {
+                            refreshCounter();
+                        }, 200);
+                    }).catch(mes => {
+                        alert(mes);
+                    });
+                    $('#urlValue').val('').focus();
+                });
+            });
+
+            function refreshCounter() {
+                chat.send("GetMessageCount");
+            }
+        });
+    </script>
+}
+
+<style>
+    #urlValue {
+        height: 34px;
+        width: -webkit-fill-available;
+        width: -moz-available;
+    }
+
+    .input-group {
+        margin: 10px 0;
+    }
+
+    #count {
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid #848c9633;
+        width: 41px;
+        background-color: #fff;
+        font-size: medium;
+        color: #7e7575;
+        padding: 7px 5px;
+        text-align: right;
+        margin-left: 20px;
+    }
+</style>
